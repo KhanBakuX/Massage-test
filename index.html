@@ -45,6 +45,7 @@
         border-top: 1px solid #ddd;
         background: #ffffff;
         display: none;
+        position: relative;
       }
 
       #panel h2 {
@@ -55,27 +56,6 @@
       #panel p {
         margin: 2px 0;
         font-size: 14px;
-      }
-
-      #panel .buttons {
-        margin-top: 8px;
-        display: flex;
-        gap: 8px;
-      }
-
-      button {
-        padding: 8px 12px;
-        border-radius: 8px;
-        border: none;
-        background: #2ea6ff;
-        color: #fff;
-        font-size: 14px;
-        cursor: pointer;
-      }
-
-      button.secondary {
-        background: #e5e5ea;
-        color: #000;
       }
 
       /* Кастомный кластер (кружок с количеством) */
@@ -141,9 +121,6 @@
         <p id="t-price"></p>
         <p id="t-desc"></p>
         <p id="t-contact"></p>
-        <div class="buttons">
-          <button id="close-panel" class="secondary">Назад к карте</button>
-        </div>
       </div>
     </div>
 
@@ -155,53 +132,6 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
     <script>
-      // Для MVP — статические тестовые данные.
-      // Позже можно заменить на fetch('/api/therapists') с сервера.
-      const therapists = [
-        {
-          id: 1,
-          name: "Иван Петров",
-          district: "Центр",
-          price_from: 2500,
-          short_description:
-            "Классический и спортивный массаж спины и шеи.",
-          lat: 55.7558,
-          lon: 37.6176,
-          telegram_username: "ivan_massage",
-          phone: "+7 999 111-11-11",
-          photo_url:
-            "https://images.pexels.com/photos/3738341/pexels-photo-3738341.jpeg?auto=compress&cs=tinysrgb&w=200",
-        },
-        {
-          id: 2,
-          name: "Анна Смирнова",
-          district: "Север",
-          price_from: 2000,
-          short_description:
-            "Релакс и лимфодренажный массаж, выезд на дом.",
-          lat: 55.8658,
-          lon: 37.6176,
-          telegram_username: "anna_relax",
-          phone: "+7 999 222-22-22",
-          photo_url:
-            "https://images.pexels.com/photos/3738344/pexels-photo-3738344.jpeg?auto=compress&cs=tinysrgb&w=200",
-        },
-        {
-          id: 3,
-          name: "Сергей Ковалёв",
-          district: "Юг",
-          price_from: 3000,
-          short_description:
-            "Спортивный массаж, работа с бегунами и триатлонистами.",
-          lat: 55.6558,
-          lon: 37.6176,
-          telegram_username: "sergey_sport",
-          phone: "+7 999 333-33-33",
-          photo_url:
-            "https://images.pexels.com/photos/3738346/pexels-photo-3738346.jpeg?auto=compress&cs=tinysrgb&w=200",
-        },
-      ];
-
       const map = L.map("map").setView([55.7558, 37.6176], 11);
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -245,35 +175,64 @@
         document.getElementById("panel").style.display = "none";
       }
 
-      therapists.forEach((t) => {
-        if (!t.lat || !t.lon) return;
-        const markerIcon = L.divIcon({
-          className: "custom-marker",
-          html: `
-            <div class="marker-photo" style="background-image:url('${
-              t.photo_url ||
-              "https://images.pexels.com/photos/3738341/pexels-photo-3738341.jpeg?auto=compress&cs=tinysrgb&w=200"
-            }')"></div>
-            <div class="marker-price">${t.price_from.toLocaleString(
-              "ru-RU"
-            )} ₽</div>
-          `,
-          iconSize: [54, 70],
-          iconAnchor: [27, 70],
-        });
-
-        const marker = L.marker([t.lat, t.lon], { icon: markerIcon });
-        marker.on("click", () => {
-          showPanel(t);
-        });
-        clusterGroup.addLayer(marker);
+      // Закрытие панели при клике на карту
+      map.on("click", () => {
+        hidePanel();
       });
 
-      map.addLayer(clusterGroup);
+      // Загрузка массажистов из API
+      async function loadTherapists() {
+        try {
+          // API через ngrok (публичный доступ)
+          const apiUrl = "https://retroflex-eupneic-rosamond.ngrok-free.dev/api/therapists";
 
-      document
-        .getElementById("close-panel")
-        .addEventListener("click", hidePanel);
+          const response = await fetch(apiUrl);
+          if (!response.ok) {
+            throw new Error("Не удалось загрузить данные");
+          }
+          const therapists = await response.json();
+
+          therapists.forEach((t) => {
+            if (!t.lat || !t.lon) return;
+            
+            const markerIcon = L.divIcon({
+              className: "custom-marker",
+              html: `
+                <div class="marker-photo" style="background-image:url('${
+                  t.photo_url ||
+                  "https://images.pexels.com/photos/3738341/pexels-photo-3738341.jpeg?auto=compress&cs=tinysrgb&w=200"
+                }')"></div>
+                <div class="marker-price">${t.price_from.toLocaleString(
+                  "ru-RU"
+                )} ₽</div>
+              `,
+              iconSize: [54, 70],
+              iconAnchor: [27, 70],
+            });
+
+            const marker = L.marker([t.lat, t.lon], { icon: markerIcon });
+            
+            // При клике на маркер показываем анкету
+            // Клик по маркеру НЕ всплывает до карты, поэтому панель не закроется
+            marker.on("click", (e) => {
+              L.DomEvent.stopPropagation(e); // Останавливаем всплытие события
+              showPanel(t);
+            });
+            
+            clusterGroup.addLayer(marker);
+          });
+
+          map.addLayer(clusterGroup);
+
+        } catch (error) {
+          console.error("Ошибка при загрузке массажистов:", error);
+          // Если API недоступен, можно показать сообщение или использовать fallback
+          alert("Не удалось загрузить данные массажистов. Проверьте, что бот запущен на localhost:8080");
+        }
+      }
+
+      // Запускаем загрузку при открытии страницы
+      loadTherapists();
     </script>
   </body>
   </html>
